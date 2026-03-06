@@ -1,0 +1,140 @@
+﻿@page "/brownianmotion"
+@using Pricer.Numerics
+@using MudBlazor
+
+<PageTitle>Brownian Motion</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Brownian Motion</MudText>
+
+    <MudText Typo="Typo.body1" Class="mb-4">
+        Simulatie van Brownian motion.
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudNumericField T="double"
+                                 Label="Maturity T"
+                                 @bind-Value="Maturity"
+                                 Min="0.1"
+                                 Step="0.1"
+                                 Immediate="true"
+                                 Variant="Variant.Outlined"
+                                 Format="0.0#" />
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudText Typo="Typo.subtitle2">Aantal stappen</MudText>
+                <MudSlider T="int"
+                           Min="10"
+                           Max="1000"
+                           Step="10"
+                           Value="NumberOfSteps"
+                           ValueChanged="OnNumberOfStepsChanged"
+                           Immediate="true" />
+                <MudText Typo="Typo.body2">Steps: @NumberOfSteps</MudText>
+                <MudText Typo="Typo.body2">Δt = @DeltaT.ToString("0.0000")</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="4">
+                <MudText Typo="Typo.subtitle2">Aantal paden</MudText>
+                <MudSlider T="int"
+                           Min="1"
+                           Max="5"
+                           Step="1"
+                           Value="NumberOfPaths"
+                           ValueChanged="OnNumberOfPathsChanged"
+                           Immediate="true" />
+                <MudText Typo="Typo.body2">Paths: @NumberOfPaths</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="4" Class="d-flex align-center">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="GenerateChart">
+                    Genereer nieuw pad
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">Gesimuleerd pad</MudText>
+
+        <div style="max-width: 850px; margin: 0 auto;">
+            <MudChart T="double"
+                      ChartType="ChartType.Line"
+                      ChartSeries="@ChartSeries"
+                      XAxisLabels="@ChartLabels"
+                      Width="100%"
+                      Height="260px" />
+        </div>
+    </MudPaper>
+
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.subtitle1">Info</MudText>
+        <MudText Typo="Typo.body2">Maturity: @Maturity.ToString("0.###")</MudText>
+        <MudText Typo="Typo.body2">Δt: @DeltaT.ToString("0.0000")</MudText>
+        <MudText Typo="Typo.body2">Quadratic variation van pad 1: @QuadraticVariation.ToString("0.0000")</MudText>
+        <MudText Typo="Typo.body2">Aantal stappen: @NumberOfSteps</MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private double Maturity = 1.0;
+    private int NumberOfSteps = 100;
+    private int NumberOfPaths = 1;
+
+    private List<ChartSeries<double>> ChartSeries = new();
+    private string[] ChartLabels = Array.Empty<string>();
+
+    private double QuadraticVariation;
+    private double DeltaT => Maturity / NumberOfSteps;
+
+    protected override void OnInitialized()
+    {
+        GenerateChart();
+    }
+
+    private Task OnNumberOfStepsChanged(int value)
+    {
+        NumberOfSteps = value;
+        GenerateChart();
+        return Task.CompletedTask;
+    }
+
+    private Task OnNumberOfPathsChanged(int value)
+    {
+        NumberOfPaths = value;
+        GenerateChart();
+        return Task.CompletedTask;
+    }
+
+    private void GenerateChart()
+    {
+        var paths = Pricer.Numerics.BrownianMotion.GeneratePaths(NumberOfPaths, Maturity, NumberOfSteps);
+
+        ChartLabels = new string[NumberOfSteps + 1];
+        for (int i = 0; i <= NumberOfSteps; i++)
+        {
+            ChartLabels[i] = (i * DeltaT).ToString("0.00");
+        }
+
+        ChartSeries = new List<ChartSeries<double>>();
+
+        for (int p = 0; p < paths.Count; p++)
+        {
+            ChartSeries.Add(new ChartSeries<double>
+            {
+                Name = $"Pad {p + 1}",
+                Data = paths[p].Values
+            });
+        }
+
+        if (paths.Count > 0)
+        {
+            QuadraticVariation = Pricer.Numerics.BrownianMotion.ComputeQuadraticVariation(paths[0]);
+        }
+    }
+}

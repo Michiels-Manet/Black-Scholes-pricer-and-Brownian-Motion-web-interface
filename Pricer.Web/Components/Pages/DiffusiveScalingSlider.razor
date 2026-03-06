@@ -1,0 +1,174 @@
+﻿@page "/diffusivescaling"
+@using Pricer.Numerics
+@using MudBlazor
+
+<PageTitle>Diffusive Scaling</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Diffusive Scaling</MudText>
+
+    <MudText Typo="Typo.body1" Class="mb-1">
+        Simulatie van een proces met variantieschaal Var(ΔX) = σ² (Δt)^α.
+    </MudText>
+    <MudText Typo="Typo.body2" Class="mb-4">
+        α &gt; 1: freezing, α = 1: Brownian motion, α &lt; 1: explosion.
+    </MudText>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudGrid>
+            <MudItem xs="12" md="3">
+                <MudNumericField T="double"
+                                 Label="Maturity T"
+                                 @bind-Value="Maturity"
+                                 Min="0.1"
+                                 Step="0.1"
+                                 Immediate="true"
+                                 Variant="Variant.Outlined"
+                                 Format="0.0##" />
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudNumericField T="double"
+                                 Label="Sigma"
+                                 @bind-Value="Sigma"
+                                 Min="0.1"
+                                 Step="0.1"
+                                 Immediate="true"
+                                 Variant="Variant.Outlined"
+                                 Format="0.0##" />
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudText Typo="Typo.subtitle2">Aantal stappen</MudText>
+                <MudSlider T="int"
+                           Min="10"
+                           Max="500"
+                           Step="10"
+                           Value="NumberOfSteps"
+                           ValueChanged="OnNumberOfStepsChanged"
+                           Immediate="true" />
+                <MudText Typo="Typo.body2">Steps: @NumberOfSteps</MudText>
+                <MudText Typo="Typo.body2">Δt = @DeltaT.ToString("0.0000")</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="3">
+                <MudText Typo="Typo.subtitle2">Alpha</MudText>
+                <MudSlider T="double"
+                           Min="0.5"
+                           Max="1.5"
+                           Step="0.05"
+                           Value="Alpha"
+                           ValueChanged="OnAlphaChanged"
+                           Immediate="true" />
+                <MudText Typo="Typo.body2">α = @Alpha.ToString("0.00")</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2">Regime</MudText>
+                <MudText Typo="Typo.body1">@RegimeText</MudText>
+            </MudItem>
+
+            <MudItem xs="12" md="6" Class="d-flex align-center">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           OnClick="GenerateChart">
+                    Genereer nieuw pad
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-2">Gesimuleerd pad</MudText>
+
+        <MudChart T="double"
+                  ChartType="ChartType.Line"
+                  ChartSeries="@ChartSeries"
+                  XAxisLabels="@ChartLabels"
+                  Width="100%"
+                  Height="320px" />
+    </MudPaper>
+
+    <MudPaper Class="pa-4">
+        <MudText Typo="Typo.subtitle1">Info</MudText>
+        <MudText Typo="Typo.body2">Maturity: @Maturity.ToString("0.###")</MudText>
+        <MudText Typo="Typo.body2">Sigma: @Sigma.ToString("0.###")</MudText>
+        <MudText Typo="Typo.body2">Alpha: @Alpha.ToString("0.###")</MudText>
+        <MudText Typo="Typo.body2">Aantal stappen: @NumberOfSteps</MudText>
+        <MudText Typo="Typo.body2">Δt: @DeltaT.ToString("0.0000")</MudText>
+        <MudText Typo="Typo.body2">Theoretical variance at time T: @TheoreticalVariance.ToString("0.0000")</MudText>
+        <MudText Typo="Typo.body2">Empirical quadratic variation: @EmpiricalQV.ToString("0.0000")</MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private double Maturity = 1.0;
+    private double Sigma = 1.0;
+    private double Alpha = 1.0;
+    private int NumberOfSteps = 100;
+
+    private List<ChartSeries<double>> ChartSeries = new();
+    private string[] ChartLabels = Array.Empty<string>();
+
+    private double TheoreticalVariance;
+    private double EmpiricalQV;
+    private string RegimeText = string.Empty;
+
+    private double DeltaT => Maturity / NumberOfSteps;
+
+    protected override void OnInitialized()
+    {
+        GenerateChart();
+    }
+
+    private Task OnNumberOfStepsChanged(int value)
+    {
+        NumberOfSteps = value;
+        GenerateChart();
+        return Task.CompletedTask;
+    }
+
+    private Task OnAlphaChanged(double value)
+    {
+        Alpha = value;
+        GenerateChart();
+        return Task.CompletedTask;
+    }
+
+    private void GenerateChart()
+    {
+        var path = DiffusiveScaling.GeneratePath(
+            Maturity,
+            NumberOfSteps,
+            Sigma,
+            Alpha);
+
+        ChartLabels = new string[NumberOfSteps + 1];
+        int labelStep = Math.Max(1, NumberOfSteps / 10);
+
+        for (int i = 0; i <= NumberOfSteps; i++)
+        {
+            ChartLabels[i] = (i % labelStep == 0)
+                ? (i * DeltaT).ToString("0.00")
+                : "";
+        }
+
+        ChartSeries = new List<ChartSeries<double>>
+        {
+            new ChartSeries<double>
+            {
+                Name = "Pad 1",
+                Data = path.Values
+            }
+        };
+
+        TheoreticalVariance = DiffusiveScaling.TheoreticalVarianceAtTime(
+            Maturity,
+            Sigma,
+            DeltaT,
+            Alpha);
+
+        EmpiricalQV = DiffusiveScaling.EmpiricalQuadraticVariation(path);
+        RegimeText = DiffusiveScaling.GetRegimeDescription(Alpha);
+    }
+}
