@@ -63,7 +63,6 @@
     <MudDivider Class="my-4" />
 
     <MudText Typo="Typo.h6">Results</MudText>
-
     <MudText>Black-Scholes Price: @(price?.ToString("F6") ?? "-")</MudText>
     <MudText>Black-Scholes Implied Vol: @(impliedVol?.ToString("F6") ?? "-")</MudText>
     <MudText>Bachelier ATM Implied Vol: @(bachelierImpliedVol?.ToString("F6") ?? "-")</MudText>
@@ -76,13 +75,106 @@
     }
 </MudPaper>
 
+<MudPaper Class="pa-4 ma-4">
+    <MudText Typo="Typo.h5" Class="mb-2">
+        Black-Scholes Call Price vs Intrinsic Value
+    </MudText>
 
-@code {
+    <MudText Class="mb-2">
+        This chart illustrates the function
+        <b>C(S, 𝜏)</b> for a call option, with fixed strike, interest rate and volatility.
+    </MudText>
 
+    <MudText Class="mb-2">
+        <b>X-axis:</b> spot price (S)
+    </MudText>
+
+    <MudText Class="mb-2">
+        <b>Y-axis:</b> call value
+    </MudText>
+
+    <MudText Class="mb-4">
+        As time to maturity 𝜏 approaches 0, the Black-Scholes call price converges to the intrinsic value
+        \(\max(S-K,0)\).
+    </MudText>
+
+    <MudPaper Class="pa-3 mb-4" Outlined="true">
+        <MudText Typo="Typo.subtitle2">Fixed parameters used in the chart</MudText>
+        <MudText>Strike (K) = @strike.ToString("F2")</MudText>
+        <MudText>Interest rate (r) = @interestRate.ToString("F4")</MudText>
+        <MudText>Volatility (𝜎) = @volatility.ToString("F4")</MudText>
+        <MudText>Time to maturity (𝜏) = @chartTimeToMaturity.ToString("F2")</MudText>
+        <MudText>Spot price range S \in [@chartMinS.ToString("F2"), @chartMaxS.ToString("F2")]</MudText>
+    </MudPaper>
+
+    <MudGrid>
+        <MudItem xs="12" md="8">
+            <MudText GutterBottom="true">
+                Chart time to maturity (𝜏) = @chartTimeToMaturity.ToString("F2")
+            </MudText>
+
+            <MudSlider T="double"
+                       Min="0"
+                       Max="2"
+                       Step="0.01"
+                       Value="chartTimeToMaturity"
+                       ValueChanged="OnChartTimeChanged"
+                       Class="mb-4" />
+
+            <MudStack Row="true" Spacing="2" Class="mb-4">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="RefreshChart">
+                    Refresh Chart
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="UseCurrentMaturityForChart">
+                    Use Input Maturity
+                </MudButton>
+            </MudStack>
+
+            <MudChart T="double"
+                      ChartType="ChartType.Line"
+                      ChartSeries="@chartSeries"
+                      Width="100%"
+                      Height="400px" />
+
+            <MudText Class="mt-3"><b>X-axis:</b> Spot price (S)</MudText>
+            <MudText><b>Y-axis:</b> Option value</MudText>
+        </MudItem>
+
+        <MudItem xs="12" md="4">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-2">Interpretation</MudText>
+
+                <MudText Class="mb-2">
+                    Blue curve: Black-Scholes call price
+                </MudText>
+
+                <MudText Class="mb-2">
+                    Green curve: intrinsic value = max(S - K, 0)
+                </MudText>
+
+                <MudText Class="mb-2">
+                    For positive time to maturity, the Black-Scholes price lies above the intrinsic value because of time value.
+                </MudText>
+
+                <MudText Class="mb-2">
+                    When 𝜏 becomes very small, the blue curve moves closer to the green curve.
+                </MudText>
+
+                <MudText>
+                    This shows the convergence to the payoff at maturity discussed in chapter 20.
+                </MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@code
+{
     private OptionType optionType = OptionType.Call;
 
-    private double underlyingPrice = 100;
-    private double strike = 100;
+    private double underlyingPrice = 100.0;
+    private double strike = 100.0;
     private double interestRate = 0.05;
     private double volatility = 0.2;
     private double timeToMaturity = 1.0;
@@ -96,37 +188,149 @@
     private double? impliedVol;
     private double? bachelierImpliedVol;
 
+    private double chartTimeToMaturity = 1.0;
+    private double chartMinS;
+    private double chartMaxS;
+
+    private List<ChartSeries<double>> chartSeries = new();
+
+    protected override void OnInitialized()
+    {
+        RefreshAll();
+    }
+
+    private void RefreshAll()
+    {
+        CalculatePrice();
+        RefreshChart();
+    }
+
     private void CalculatePrice()
     {
-        var blackScholesPricer = new BlackScholes(
-            optionType,
-            interestRate,
-            timeToMaturity,
-            volatility,
-            strike,
-            underlyingPrice
-        );
+        errorMessage = null;
 
-        price = blackScholesPricer.Price();
+        try
+        {
+            var blackScholesPricer = new BlackScholes(
+                optionType,
+                interestRate,
+                timeToMaturity,
+                volatility,
+                strike,
+                underlyingPrice
+            );
+
+            price = blackScholesPricer.Price();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
     }
 
     private void ComputeImpliedVol()
     {
-        impliedVol = ImpliedVolatilityCalculator.Compute(
-            optionType,
-            marketPrice,
-            interestRate,
-            timeToMaturity,
-            strike,
-            underlyingPrice,
-            0.2D,
-            tolerance,
-            maxIterations
-        );
+        errorMessage = null;
+
+        try
+        {
+            impliedVol = ImpliedVolatilityCalculator.Compute(
+                optionType,
+                marketPrice,
+                interestRate,
+                timeToMaturity,
+                strike,
+                underlyingPrice,
+                0.2D,
+                tolerance,
+                maxIterations
+            );
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
     }
 
     private void ComputeBachelierImpliedVol()
     {
-        bachelierImpliedVol = ImpliedVolatilityCalculator.BachelierImpliedVolATM(marketPrice, underlyingPrice, timeToMaturity, interestRate);
+        errorMessage = null;
+
+        try
+        {
+            bachelierImpliedVol = ImpliedVolatilityCalculator.BachelierImpliedVolATM(
+                marketPrice,
+                underlyingPrice,
+                timeToMaturity,
+                interestRate
+            );
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void OnChartTimeChanged(double value)
+    {
+        chartTimeToMaturity = value;
+        RefreshChart();
+    }
+
+    private void UseCurrentMaturityForChart()
+    {
+        chartTimeToMaturity = Math.Max(0.0, timeToMaturity);
+        RefreshChart();
+    }
+
+    private void RefreshChart()
+    {
+        errorMessage = null;
+
+        try
+        {
+            int numberOfPoints = 41;
+
+            chartMinS = Math.Max(1.0, 0.4 * strike);
+            chartMaxS = Math.Max(chartMinS + 1.0, 1.6 * strike);
+
+            double[] bsCallPrices = new double[numberOfPoints];
+            double[] intrinsicValues = new double[numberOfPoints];
+
+            for (int i = 0; i < numberOfPoints; i++)
+            {
+                double s = chartMinS + i * (chartMaxS - chartMinS) / (numberOfPoints - 1);
+
+                var bs = new BlackScholes(
+                    OptionType.Call,
+                    interestRate,
+                    chartTimeToMaturity,
+                    volatility,
+                    strike,
+                    s
+                );
+
+                bsCallPrices[i] = bs.Price();
+                intrinsicValues[i] = Math.Max(s - strike, 0.0);
+            }
+
+            chartSeries = new List<ChartSeries<double>>
+            {
+                new ChartSeries<double>
+                {
+                    Name = "Black-Scholes Call",
+                    Data = bsCallPrices
+                },
+                new ChartSeries<double>
+                {
+                    Name = "Intrinsic Value",
+                    Data = intrinsicValues
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
     }
 }
